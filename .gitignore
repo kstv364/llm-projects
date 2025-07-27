@@ -1,0 +1,66 @@
+# Python
+**/__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.egg
+*.egg-info/
+dist/
+build/
+*.so
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+.ipynb_checkpoints/
+**/vector_store
+
+**/.gradio
+# VS Code
+.vscode/
+.history/
+
+# PyCharm
+.idea/
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+
+# Test and coverage
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+
+# LLM project artifacts
+checkpoints/
+runs/
+output/
+models/
+data/
+*.ckpt
+*.pt
+*.pth
+
+# Environment variables
+.env
+.env.*
+
+# Misc
+*.sqlite3
+*.db
+*.bak
+*.tmp
+*.swp
+*.swo
