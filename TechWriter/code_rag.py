@@ -1,22 +1,4 @@
-# %% [markdown]
-# # Code to Medium Article Generator with Persistent Vector Store
-# 
-# This notebook creates a system that:
-# 1. Reads code files from a specified folder
-# 2. Persistently stores their content in a Chroma vector store
-# 3. Generates technical Medium articles through a Gradio chat interface
-# 4. Allows resuming processing from previous state
-# 5. Formats articles in active voice, targeting recruiters and managers
-# 
-# Key Features:
-# - Persistent vector store using SQLite backend
-# - Progress tracking and state management
-# - Chunk-based processing with automatic saves
-# - Resume capability for interrupted processing
 
-# %%
-# Install required packages
-!pip install langchain langchain-community chromadb pypdf gradio requests numpy tqdm
 
 # %%
 import os
@@ -40,14 +22,6 @@ from langchain.prompts import PromptTemplate
 from langchain.schema import Document
 import gradio as gr
 
-# %% [markdown]
-# # Vector Store Configuration and Helper Functions
-# 
-# We'll set up:
-# 1. Directory configuration for persistent storage
-# 2. Helper functions for time formatting and progress tracking
-# 3. Vector store initialization and management functions
-# 4. Processing progress tracking and state management
 
 # %%
 # Helper function for time formatting
@@ -192,7 +166,6 @@ def get_vector_store_stats():
         "processed_files": 0
     }
 
-# %%
 def initialize_code_store():
     """Initialize or load existing code vector store."""
     os.makedirs(CODE_PERSIST_DIRECTORY, exist_ok=True)
@@ -248,15 +221,6 @@ def get_code_store_stats():
         "persist_directory": CODE_PERSIST_DIRECTORY, 
         "processed_files": 0
     }
-
-# %% [markdown]
-# # Document Processing and Vector Store Population
-# 
-# Now we'll implement the core document processing functionality:
-# 1. Load PDFs from the specified directory
-# 2. Split documents into chunks
-# 3. Process and store embeddings with progress tracking
-# 4. Save state at regular intervals
 
 # %%
 def load_code_files(directory):
@@ -391,151 +355,11 @@ def process_code_files(documents, vectorstore=None):
     return vectorstore
 
 # %%
-def load_pdfs(directory):
-    """Load all PDFs from the specified directory."""
-    pdf_files = list(Path(directory).glob("*.pdf"))
-    if not pdf_files:
-        print("No PDF files found in the specified directory.")
-        return []
-    
-    print(f"\nLoading {len(pdf_files)} PDF files...")
-    documents = []
-    for pdf_path in pdf_files:
-        try:
-            loader = PyPDFLoader(str(pdf_path))
-            documents.extend(loader.load())
-            print(f"✓ Loaded {pdf_path.name}")
-        except Exception as e:
-            print(f"✗ Error loading {pdf_path.name}: {str(e)}")
-    return documents
-
-def process_documents(documents, vectorstore=None):
-    """Split documents and create/update vector store with progress tracking."""
-    if not documents:
-        print("No documents to process.")
-        return initialize_vector_store()
-    
-    # Verify Ollama connection and embeddings before processing
-    if not verify_ollama_connection() or not test_embeddings():
-        raise RuntimeError("Failed to initialize Ollama and embeddings. Please check the error messages above.")
-    
-    # Initialize or load vector store
-    if vectorstore is None:
-        vectorstore = initialize_vector_store()
-    
-    # Load processing progress
-    processed_files = load_processing_progress()
-    
-    # Initialize timing and progress tracking
-    start_time = time.time()
-    total_docs = len(documents)
-    print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Starting processing of {total_docs} documents")
-    
-    # Text splitter with optimized chunk size
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=100,
-        length_function=len,
-        separators=["\n\n", "\n", ".", "!", "?", ",", " ", ""]
-    )
-    
-    # Estimate chunks and time
-    sample_size = min(5, len(documents))
-    sample_chunks = sum(len(text_splitter.split_text(doc.page_content)) for doc in documents[:sample_size])
-    estimated_total_chunks = math.ceil((sample_chunks / sample_size) * len(documents))
-    print(f"Estimated total chunks: {estimated_total_chunks} (based on {sample_size} document sample)")
-    
-    # Process documents with progress tracking
-    processed_chunks = 0
-    save_interval = 30  # Save every 30 chunks for better persistence
-    last_saved_chunk = 0
-    
-    for i, doc in enumerate(documents, 1):
-        # Check if document was already processed
-        if doc.metadata.get('source') in processed_files:
-            print(f"Skipping already processed document: {doc.metadata.get('source')}")
-            continue
-        print(f"\nProcessing document {i}/{total_docs}: {doc.metadata.get('source', 'Unknown Source')}")
-        chunk_start = time.time()
-        texts = text_splitter.split_documents([doc])
-        processed_chunks += len(texts)
-        
-        try:
-            # Add to vector store with retry logic
-            max_retries = 3
-            for attempt in range(max_retries):
-                try:
-                    vectorstore.add_documents(texts)
-                    
-                    # Save progress periodically
-                    if processed_chunks > last_saved_chunk + save_interval:
-                        save_vector_store(vectorstore)
-                        print(f"\nProgress saved. Total chunks processed: {processed_chunks}")
-                        last_saved_chunk = processed_chunks
-                    
-                    break
-                except ValueError as e:
-                    if attempt == max_retries - 1:
-                        raise
-                    print(f"Retry {attempt + 1}/{max_retries} - Waiting 2 seconds before retry...")
-                    time.sleep(2)
-        
-            # Calculate progress and estimates
-            chunk_time = time.time() - chunk_start
-            elapsed_total = time.time() - start_time
-            avg_time_per_chunk = elapsed_total / processed_chunks
-            estimated_remaining_chunks = estimated_total_chunks - processed_chunks
-            estimated_remaining_time = estimated_remaining_chunks * avg_time_per_chunk
-            
-            print(f"\nProgress: Document {i}/{total_docs}")
-            print(f"Chunks in this document: {len(texts)}")
-            print(f"Total chunks processed: {processed_chunks}/{estimated_total_chunks}")
-            print(f"Time for this document: {format_time(chunk_time)}")
-            print(f"Estimated remaining time: {format_time(estimated_remaining_time)}")
-        
-        except Exception as e:
-            print(f"\nERROR processing document {i}: {str(e)}")
-            print("Continuing with next document...")
-            continue
-    
-    # Final save
-    save_vector_store(vectorstore)
-    processed_files[doc.metadata.get('source')] = get_file_hash(doc.metadata.get('source'))
-    save_processing_progress(processed_files)
-    
-    # Final statistics
-    total_time = time.time() - start_time
-    print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Processing completed:")
-    print(f"Total documents processed: {total_docs}")
-    print(f"Total chunks created: {processed_chunks}")
-    print(f"Total processing time: {format_time(total_time)}")
-    print(f"Average time per chunk: {(total_time/processed_chunks):.2f} seconds")
-    
-    # Show vector store stats
-    stats = get_vector_store_stats()
-    print("\nVector Store Statistics:")
-    print(f"Total documents in store: {stats['total_documents']}")
-    print(f"Total processed files: {stats['processed_files']}")
-    print(f"Store location: {stats['persist_directory']}")
-    
-    return vectorstore
-
-# %% [markdown]
-# # Article Generation with LLM Chain
-# 
-# We'll set up the article generation pipeline:
-# 1. Create a prompt template for technical articles
-# 2. Initialize the LLM chain with Ollama
-# 3. Create a function to generate articles from vector store content
-# 4. Add a Gradio interface for easy interaction
-
-# %%
 # Setup the article generation chain
 article_template = """
 You are an expert technical writer and software engineer creating a Medium article to showcase your skills in AI and ML.
 Topic: {topic}
 Retrieved Content:
-PDF Content: {pdf_context}
 Code Content: {code_context}
 
 Write a 1200-word technical article that:
@@ -553,89 +377,43 @@ article_prompt = PromptTemplate(
     template=article_template
 )
 
-pdf_directory = "pdfs123"
 code_directory = "code"
 
 # Initialize Ollama with llama3 model
 llm = Ollama(model="llama3")
 article_chain = LLMChain(llm=llm, prompt=article_prompt)
 
-def generate_article(topic, pdf_vectorstore, code_vectorstore):
+def generate_article(topic, code_vectorstore):
     """Generate a Medium article based on the topic and both vector stores' content."""
-    # Search both vector stores for relevant content
-    pdf_results = pdf_vectorstore.similarity_search(topic, k=3)
     code_results = code_vectorstore.similarity_search(topic, k=3)
-    
-    pdf_context = "\n".join([doc.page_content for doc in pdf_results])
     code_context = "\n".join([doc.page_content for doc in code_results])
     
     # Generate the article
-    article = article_chain.run(topic=topic, pdf_context=pdf_context, code_context=code_context)
+    article = article_chain.run(topic=topic, code_context=code_context)
+    # Save the article to a time-stamped file
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    with open(f"generated_article_{timestamp}.md", "w") as f:
+        f.write(article)
     return article
 
 def gradio_interface(topic):
     """Gradio interface function for article generation."""
     try:
-        has_pdfs = any(Path(pdf_directory).glob("*.pdf"))
         has_code =  any(Path(code_directory).rglob("*.*"))
         
-        if not has_pdfs and not has_code:
-            return "Error: No PDF files or code files found. Please add some files first."
+        if not has_code:
+            return "Error: No code files found. Please add some files first."
         
-        # Initialize vector stores
-        pdf_vectorstore = initialize_vector_store()
         code_vectorstore = initialize_code_store()
         
-        if not pdf_vectorstore or not code_vectorstore:
+        if not code_vectorstore:
             return "Error: Could not initialize vector stores. Please check if the stores exist and contain documents."
         
-        article = generate_article(topic, pdf_vectorstore, code_vectorstore)
+        article = generate_article(topic, code_vectorstore)
         return article
     except Exception as e:
         return f"Error generating article: {str(e)}"
 
-# %%
-# Directory setup and initial processing
-pdf_directory = "pdfs123"
-code_directory = "code"
-os.makedirs(pdf_directory, exist_ok=True)
-os.makedirs(code_directory, exist_ok=True)
-
-# Process files if they exist
-print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Starting file processing pipeline")
-
-# Verify Ollama setup first
-if verify_ollama_connection() and test_embeddings():
-    # Show existing vector store stats if any
-    print("\nCurrent Vector Store Status:")
-    pdf_stats = get_vector_store_stats()
-    code_stats = get_code_store_stats()
-    print("\nPDF Vector Store:")
-    print(f"Total documents: {pdf_stats['total_documents']}")
-    print(f"Total processed files: {pdf_stats['processed_files']}")
-    print("\nCode Vector Store:")
-    print(f"Total documents: {code_stats['total_documents']}")
-    print(f"Total processed files: {code_stats['processed_files']}")
-    
-    # Process PDFs
-    if any(Path(pdf_directory).glob("*.pdf")):
-        print("\nProcessing PDF files...")
-        documents = load_pdfs(pdf_directory)
-        vectorstore = process_documents(documents)
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] PDF vector store creation completed")
-    else:
-        print("\nNo PDF files found in the 'pdfs' directory.")
-    
-    # Process code files
-    if any(Path(code_directory).rglob("*.*")):
-        print("\nProcessing code files...")
-        code_documents = load_code_files(code_directory)
-        code_vectorstore = process_code_files(code_documents)
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] Code vector store creation completed")
-    else:
-        print("\nNo code files found in the 'code' directory.")
-else:
-    print("Setup verification failed. Please check the error messages above.")
 
 # %%
 iface = gr.Interface(
@@ -655,8 +433,6 @@ iface = gr.Interface(
 # Launch the interface
 iface.launch(share=True)
 
-# %%
-iface.close()  # Close the interface when done
 
 # %% [markdown]
 # # How to Use
