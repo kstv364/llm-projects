@@ -138,12 +138,11 @@ def get_vector_store_stats():
 
 
 article_template = """
-You are Kaustav Chanda, an expert technical writer and software engineer creating a Medium article to showcase your skills in AI and ML. 
-You are targeting to showcase your skills to potential employers and clients.
+You are Kaustav Chanda, an expert technical writer creating a Medium article to showcase your skills in AI and ML. 
 Topic: {topic}
 Retrieved Content: {context}
 
-Write a 1500-word technical article that follows Medium's style and markdown formatting:
+Write a strictly-greater-than 1500-word technical article that follows Medium's style and markdown formatting:
 1. Uses active voice throughout
 2. Explains deep technical concepts in business-friendly language
 3. Highlights practical applications and business value
@@ -166,24 +165,29 @@ article_chain = LLMChain(llm=llm, prompt=article_prompt)
 def generate_article(topic, vectorstore):
     """Generate a Medium article based on the topic and vector store content."""
     # Search the vector store for relevant content
-    results = vectorstore.similarity_search(topic, k=4)
+    results = vectorstore.similarity_search(topic, k=5)
     context = "\n".join([doc.page_content for doc in results])
     
     # Generate the article
     article = article_chain.run(topic=topic, context=context)
     return article
 
-def gradio_interface(topic):
+def gradio_interface(topic, progress=gr.Progress()):
     """Gradio interface function for article generation."""
     try:        
         # Initialize vector store
+        progress(0, desc="Initializing vector store...")
         vectorstore = initialize_vector_store()
         if not vectorstore:
             return "Error: Could not initialize vector store. Please check if the store exists and contains documents."
         
+        progress(0.3, desc="Searching relevant content...")
         article = generate_article(topic, vectorstore)
         print(f"Generated article for topic: {topic}")
         print(f"Article length: {len(article.split())} words")
+        with open(f"generated_article_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md", "w") as f:
+            f.write(article)
+        progress(1.0, desc="Article generated!")
         return article
     except Exception as e:
         return f"Error generating article: {str(e)}"
@@ -199,7 +203,13 @@ iface = gr.Interface(
         label="Generated Article"
     ),
     title="Technical Article Generator",
-    description="Generate a 1200-word technical article from your PDF content"
+    description="Generate a 1200-word technical article from your PDF content",
+    cache_examples=False,  # Disable caching to ensure fresh generation
+    examples=[
+        ["Understanding Large Language Models"],
+        ["The Future of AI in Business"],
+        ["Machine Learning Best Practices"]
+    ]
 )
 
 if __name__ == "__main__":
