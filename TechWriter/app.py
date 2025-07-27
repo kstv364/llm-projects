@@ -1,4 +1,4 @@
-# %%
+# TechWriter - A tool to convert PDF documents into Medium articles using AI
 import os
 import time
 from datetime import datetime
@@ -136,19 +136,20 @@ def get_vector_store_stats():
     }
 
 
-get_vector_store_stats()
 
 article_template = """
-You are an expert technical writer and software engineer creating a Medium article to showcase your skills in AI and ML.
+You are Kaustav Chanda, an expert technical writer and software engineer creating a Medium article to showcase your skills in AI and ML. 
+You are targeting to showcase your skills to potential employers and clients.
 Topic: {topic}
 Retrieved Content: {context}
 
-Write a 1200-word technical article that:
+Write a 1500-word technical article that follows Medium's style and markdown formatting:
 1. Uses active voice throughout
 2. Explains deep technical concepts in business-friendly language
 3. Highlights practical applications and business value
 4. Includes relevant examples from the source material
 5. Structures content with clear headings and subheadings
+6. Uses proper Markdown formatting with an author bio at the end
 
 Article:
 """
@@ -165,7 +166,7 @@ article_chain = LLMChain(llm=llm, prompt=article_prompt)
 def generate_article(topic, vectorstore):
     """Generate a Medium article based on the topic and vector store content."""
     # Search the vector store for relevant content
-    results = vectorstore.similarity_search(topic, k=8)
+    results = vectorstore.similarity_search(topic, k=4)
     context = "\n".join([doc.page_content for doc in results])
     
     # Generate the article
@@ -181,6 +182,8 @@ def gradio_interface(topic):
             return "Error: Could not initialize vector store. Please check if the store exists and contains documents."
         
         article = generate_article(topic, vectorstore)
+        print(f"Generated article for topic: {topic}")
+        print(f"Article length: {len(article.split())} words")
         return article
     except Exception as e:
         return f"Error generating article: {str(e)}"
@@ -192,8 +195,7 @@ iface = gr.Interface(
         placeholder="Enter the topic for your technical article...",
         label="Article Topic"
     ),
-    outputs=gr.Textbox(
-        lines=20,
+    outputs=gr.Markdown(
         label="Generated Article"
     ),
     title="Technical Article Generator",

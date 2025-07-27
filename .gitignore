@@ -17,11 +17,13 @@ ENV/
 .venv/
 .ipynb_checkpoints/
 **/vector_store
+**/pdfs
 
 **/.gradio
 # VS Code
 .vscode/
 .history/
+
 
 # PyCharm
 .idea/
