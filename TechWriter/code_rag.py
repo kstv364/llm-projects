@@ -354,8 +354,6 @@ def process_code_files(documents, vectorstore=None):
     
     return vectorstore
 
-# %%
-# Setup the article generation chain
 article_template = """
 You are an expert technical writer and software engineer creating a Medium article to showcase your skills in AI and ML.
 Topic: {topic}
@@ -415,7 +413,6 @@ def gradio_interface(topic):
         return f"Error generating article: {str(e)}"
 
 
-# %%
 iface = gr.Interface(
     fn=gradio_interface,
     inputs=gr.Textbox(
